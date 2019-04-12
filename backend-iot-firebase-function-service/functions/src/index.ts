@@ -127,32 +127,30 @@ export const saveImage = functions.https.onRequest((request, response) => {
     }
     //console.log( 'header', header );
 
-    // parse the device ID from the header (in the filename field)
-    let fn = header.indexOf("filename=");
-    let did_index_start = fn + "filename=\"".length;
-    let did_index_end = header.indexOf("\"", did_index_start);
-    let did = header.substring(did_index_start, did_index_end);
-    //console.log( 'device_id', did );
-
     // remove header and overwrite file contents Buffer
     file_contents = file_contents.slice(offset); 
     //console.log( 'new buffer length:', file_contents.length );
 
-    // get UTC timestamp
-    let TS = new Date().toISOString();
+    // parse the file name from the header (in the filename field)
+    let fn = header.indexOf("filename=");
+    let fn_index_start = fn + "filename=\"".length;
+    let fn_index_end = header.indexOf("\"", fn_index_start);
+    let file_name = header.substring(fn_index_start, fn_index_end);
+    //console.log( 'file_name', file_name );
 
-    // make a unique file name from UTC + DeviceID 
-    let file_name = did + '_' + TS + '.png';
+    // parse the device ID from the start of the file_name
+    let did_index_end = file_name.indexOf("_"); // finds first '_'
+    let did = file_name.substring(0, did_index_end);
+    //console.log( 'device_id', did );
 
     // save the file to gstorage
     // https://cloud.google.com/nodejs/docs/reference/storage/2.3.x/Bucket#file
-    let bucket = storage.bucket(BUCKET); // default firebase storage bucket
+    let bucket = storage.bucket(BUCKET); // GCP storage bucket (not firebase)
     let file = bucket.file(file_name);
     const metadata = {
         contentType: 'image/png',
         metadata: {
-            device_id: did,
-            timestamp: TS
+            device_id: did
         }
     };
     file.save(file_contents, metadata, function(err) {
@@ -163,13 +161,12 @@ export const saveImage = functions.https.onRequest((request, response) => {
     });
     //console.log("Saved image to gstorage:", file_name);
 
-    // also save the fact we wrote a file to storate, to firebase doc DB
+    // also save the fact we wrote a file to storage, in the firebase doc DB
     const doc = {
         bucket: BUCKET,
         file_name: file_name,
         URL: BUCKET_URL + file_name,
-        device_id: did,
-        timestamp: TS
+        device_id: did
     };
     images_db_ref.add( doc ).then( newdoc => {
         //console.log('Added image meta doc: ', doc);
