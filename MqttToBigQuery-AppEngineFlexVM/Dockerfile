@@ -11,6 +11,7 @@ RUN pip install --upgrade google-cloud-pubsub
 RUN pip install --upgrade google-cloud-bigquery
 RUN pip install --upgrade google-cloud-datastore
 RUN pip install --upgrade google-cloud-storage
+RUN pip install --upgrade firebase-admin
 
 # ADD copies files to the docker filesystem image at the specified path
 ADD mqtt-to-bigquery.py /mqtt-to-bigquery.py

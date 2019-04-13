@@ -17,6 +17,7 @@ fi
 export BQ_DATASET="openag_public_user_data"
 export BQ_TABLE="vals"
 export CS_BUCKET="openag-v1-images"
+export FIREBASE_SERVICE_ACCOUNT=./fb-service-account.json
 
 
 # Has the user setup the local python environment we need?

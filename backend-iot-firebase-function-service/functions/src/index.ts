@@ -163,7 +163,7 @@ export const saveImage = functions.https.onRequest((request, response) => {
 
     // also save the fact we wrote a file to storage, in the firebase doc DB
     const doc = {
-        bucket: BUCKET,
+        bucket: BUCKET_NAME,
         file_name: file_name,
         URL: BUCKET_URL + file_name,
         device_id: did

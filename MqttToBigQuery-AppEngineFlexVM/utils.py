@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """ This file contains some utilities used for processing data and 
-    writing data to BigQuery.
+    writing data to Firebase doc DB, Storage, Datastore and BigQuery.
 """
 
 import os, time, logging, struct, sys, traceback, base64, ast
@@ -9,6 +9,9 @@ from datetime import datetime
 from google.cloud import bigquery
 from google.cloud import datastore
 from google.cloud import storage
+import firebase_admin
+from firebase_admin import credentials
+from firebase_admin import firestore
 
 
 # should be enough retries to insert into BQ
@@ -19,7 +22,8 @@ NUM_RETRIES = 3
 messageType_KEY = 'messageType'
 messageType_EnvVar = 'EnvVar'
 messageType_CommandReply = 'CommandReply'
-messageType_Image = 'Image'
+messageType_Image = 'Image' #TODO, deprecated, remove when all devices are updated to latest code as of April 30, 2019.
+messageType_ImageUpload = 'ImageUpload'
 
 # keys for messageType='EnvVar' (and also 'CommandReply')
 var_KEY = 'var'
@@ -28,6 +32,8 @@ values_KEY = 'values'
 # keys for messageType='Image'
 varName_KEY = 'varName'
 imageType_KEY = 'imageType'
+fileName_KEY = 'fileName'
+#TODO all 4 keys below deprecated
 chunk_KEY = 'chunk'
 totalChunks_KEY = 'totalChunks'
 imageChunk_KEY = 'imageChunk'
@@ -62,6 +68,9 @@ def validateMessageType( valueDict ):
 
     if messageType_Image == valueDict[ messageType_KEY ]:
         return messageType_Image
+
+    if messageType_ImageUpload == valueDict[ messageType_KEY ]:
+        return messageType_ImageUpload
 
     logging.error('validateMessageType: Invalid value {} for key {}'.format(
         valueDict[ messageType_KEY ], messageType_KEY ))
@@ -136,6 +145,31 @@ data=b'{"messageType": "CommandReply", "var": "status", "values": "{\\"name\\":\
 
 
 #------------------------------------------------------------------------------
+# https://google-cloud-python.readthedocs.io/en/stable/storage/buckets.html
+# Copy a file from one storage bucket to another.
+# Returns the public URL in the new location.
+def copyAndDeleteFileInCloudStorage(CS, src_bucket, dest_bucket, file_name):
+    src = CS.get_bucket(src_bucket)
+    dest = CS.get_bucket(dest_bucket)
+
+    # get image in source bucket
+    src_image = src.get_blob(file_name)
+    if src_image is None:
+        logging.error('copyAndDeleteFileInCloudStorage file {} not found in bucket {}'.format(file_name, src_bucket))
+        return
+    
+    # copy image to dest bucket
+    dest_image = src.copy_blob(src_image, dest)
+    dest_image.make_public() # bucket is already public, just for safety sake
+
+    # delete the src image
+    src_image.delete()
+
+    # return the new public url
+    return dest_image.public_url
+
+
+#------------------------------------------------------------------------------
 # Save the image bytes to a file in cloud storage.
 # The cloud storage bucket we are using allows "allUsers" to read files.
 # Return the public URL to the file in a cloud storage bucket.
@@ -176,6 +210,7 @@ def saveImageURLtoDatastore( DS, deviceId, publicURL, cameraName ):
 
 #------------------------------------------------------------------------------
 # Save a partial b64 chunk of an image to a cache in the datastore.
+#TODO: deprecated
 def saveImageChunkToDatastore( DS, deviceId, messageId, varName, imageType, \
         chunkNum, totalChunks, imageChunk ):
     key = DS.key( 'MqttServiceCache' )
@@ -201,6 +236,7 @@ def saveImageChunkToDatastore( DS, deviceId, messageId, varName, imageType, \
 
 #------------------------------------------------------------------------------
 # Returns list of dicts, each with a chunk.
+#TODO: deprecated
 def getImageChunksFromDatastore( DS, deviceId, messageId ):
     query = DS.query( kind='MqttServiceCache' )
     query.add_filter( 'deviceId', '=', deviceId )
@@ -223,6 +259,7 @@ def getImageChunksFromDatastore( DS, deviceId, messageId ):
 
 
 #------------------------------------------------------------------------------
+#TODO: deprecated
 def deleteImageChunksFromDatastore( DS, deviceId, messageId ):
     query = DS.query( kind='MqttServiceCache' )
     query.add_filter( 'deviceId', '=', deviceId )
@@ -236,6 +273,7 @@ def deleteImageChunksFromDatastore( DS, deviceId, messageId ):
 
 #------------------------------------------------------------------------------
 # Save the ids of an invalid image, so we can clean up the cache.
+#TODO: deprecated
 def saveTurd( DS, deviceId, messageId ):
     key = DS.key( 'MqttServiceTurds' )
     turd = datastore.Entity( key )
@@ -252,6 +290,7 @@ def saveTurd( DS, deviceId, messageId ):
 
 #------------------------------------------------------------------------------
 # Returns list of dicts, each with a chunk.
+#TODO: deprecated
 def getTurds( DS, deviceId ):
     query = DS.query( kind='MqttServiceTurds' )
     query.add_filter( 'deviceId', '=', deviceId )
@@ -268,6 +307,7 @@ def getTurds( DS, deviceId ):
 
 
 #------------------------------------------------------------------------------
+#TODO: deprecated
 def deleteTurd( DS, deviceId, messageId ):
     query = DS.query( kind='MqttServiceTurds' )
     query.add_filter( 'deviceId', '=', deviceId )
@@ -279,8 +319,99 @@ def deleteTurd( DS, deviceId, messageId ):
     return
 
 
+# ------------------------------------------------------------------------------
+# 1. Get the image upload document from the firestore doc DB.
+# 2. Move the image from the storage upload bucket into the images one.
+# 3. Delete the fb doc and image in upload bucket.
+def moveImageUpdateFBDB(FB, CS, CS_BUCKET, file_name):
+
+    docs_ref = FB.collection(u'deviceUploadedImages')
+
+# doc={'URL': 'https://storage.googleapis.com/openag-public-image-uploads/EDU-EFB0ECDE-c4-b3-01-8d-9b-8c_2019-04-12-T19:57:59Z_Camera-Top.png', 'device_id': 'EDU-EFB0ECDE-c4-b3-01-8d-9b-8c', 'file_name': 'EDU-EFB0ECDE-c4-b3-01-8d-9b-8c_2019-04-12-T19:57:59Z_Camera-Top.png', 'bucket': 'openag-public-image-uploads'}
+
+# DEBUG:root:data=b'{"messageType": "ImageUpload", "varName": "Camera-Top", "fileName": "EDU-EFB0ECDE-c4-b3-01-8d-9b-8c_2019-04-12-T19:57:59Z_Camera-Top.png"}'
+
+    # query the collection for the file name (could be multiple if testing)
+    query = docs_ref.where(u'file_name', u'==', file_name)
+    docs = list(query.get())
+    if not docs:
+        logging.error('moveImageUpdateFBDB: ERROR: '
+              'file "{}" not found.'.format(file_name))
+        return 
+    
+    # get the single matching doc
+    doc = docs[0]
+    keyd = doc.to_dict()
+    src_bucket = keyd['bucket']
+    file_name = keyd['file_name']
+    #URL = keyd['URL']
+    #device_id = keyd['device_id']
+
+    # delete this document
+    doc_ref = doc.reference
+    doc_ref.delete() 
+
+    # move the file(s) and delete the docs (cleans up dupes)
+    publicURL = copyAndDeleteFileInCloudStorage(CS, src_bucket, CS_BUCKET, file_name)
+
+    return publicURL
+
+
 #------------------------------------------------------------------------------
-# Parse and save the image
+# New way of handling images.  The image has already been uploaded 
+# (in an open and un-secured manner) to a GCP bucket via a public
+# firebase cloud function.  
+# This is just a message telling us it was done (over the secure IoT 
+# messaging) and gives us a hook to move the image and update the BQ, DS.
+def handle_uploaded_image( CS, DS, BQ, FB, pydict, deviceId, PROJECT, 
+        DATASET, TABLE, CS_BUCKET ):
+    try:
+        if messageType_ImageUpload != validateMessageType( pydict ):
+            logging.error( "handle_uploaded_image: invalid message type" )
+            return
+
+        # each received image message must have these fields
+        if not validDictKey( pydict, varName_KEY ) or \
+           not validDictKey( pydict, fileName_KEY ):
+            logging.error('handle_uploaded_image: Missing key(s) in dict.')
+            return
+
+        varName =  pydict[ varName_KEY ]
+        fileName = pydict[ fileName_KEY ]
+#debugrob: looks like this gets the message before the file is in the storage bucket some times.   
+# Put the file & var in a list to be processed later?
+# Queue them up in DS?
+
+        # Move image from one gstorage bucket to another:
+        #   openag-public-image-uploads to openag-v1-images.
+        # Delete the firebase db doc that has this file name in it.
+        publicURL = moveImageUpdateFBDB(FB, CS, CS_BUCKET, fileName)
+
+        # Put the URL in the datastore for the UI to use.
+        saveImageURLtoDatastore(DS, deviceId, publicURL, varName)
+
+        # Put the URL as an env. var in BQ.
+        message_obj = {}
+        # keep old message type, UI code may depend on it
+        message_obj[ messageType_KEY ] = messageType_Image
+        message_obj[ var_KEY ] = varName
+        valuesJson = "{'values':["
+        valuesJson += "{'name':'URL', 'type':'str', 'value':'%s'}" % \
+                            ( publicURL )
+        valuesJson += "]}"
+        message_obj[ values_KEY ] = valuesJson
+        bq_data_insert( BQ, message_obj, deviceId, PROJECT, DATASET, TABLE )
+
+#debugrob: remove any files in openag-public-image-uploads that are over an hour old
+
+    except Exception as e:
+        exc_type, exc_value, exc_traceback = sys.exc_info()
+        logging.critical( "Exception in handle_uploaded_image(): %s" % e)
+        traceback.print_tb( exc_traceback, file=sys.stdout )
+
+#------------------------------------------------------------------------------
+# Parse and save the image.
+#TODO, deprecated code below, remove when all devices are updated to latest code as of April 30, 2019.
 def save_image( CS, DS, BQ, pydict, deviceId, PROJECT, DATASET, TABLE, \
         CS_BUCKET ):
     try:
@@ -532,13 +663,22 @@ def save_data_to_Device( DS, pydict, deviceId ):
 # This method is the entry point for all data sent to our service, once 
 # the message type is validated.
 # Parse and save the (json/dict) data to the appropriate place.
-def save_data( CS, DS, BQ, pydict, deviceId, \
+def save_data( CS, DS, BQ, FB, pydict, deviceId, \
         PROJECT, DATASET, TABLE, CS_BUCKET ):
 
+    #TODO, deprecated code block below, remove when all devices are updated to latest code as of April 30, 2019.
     if messageType_Image == validateMessageType( pydict ):
         save_image( CS, DS, BQ, pydict, deviceId, PROJECT, DATASET, TABLE, 
                 CS_BUCKET )
         return 
+
+    # New way of handling (already) uploaded images.  
+    if messageType_ImageUpload == validateMessageType( pydict ):
+        handle_uploaded_image( CS, DS, BQ, FB, pydict, deviceId, PROJECT, 
+                DATASET, TABLE, CS_BUCKET )
+        return 
+
+#debugrob: for every message, check the queue and see if we can process images
 
     # Save the most recent data as properties on the Device entity in the
     # datastore.
@@ -566,7 +706,7 @@ def bq_data_insert( BQ, pydict, deviceId, PROJECT, DATASET, TABLE ):
         response = BQ.insert_rows( table, rowList )
         logging.info( 'bq response: {}'.format( response ))
 
-#debugrob: I need to look up the the User in the Datastore by deviceId, and find their openag flag (or role), to know the correct DATASET to write to.
+#TODO: need to look up the the User in the Datastore by deviceId, and find their openag flag (or role), to know the correct DATASET to write to.
 
         return True
 
