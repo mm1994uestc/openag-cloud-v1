@@ -1,5 +1,17 @@
 import React from 'react';
-import {ChartContainer, ChartRow, Charts, LineChart, Resizable, styler, YAxis, Legend} from "react-timeseries-charts";
+
+import {
+    ChartContainer,
+    ChartRow,
+    Charts,
+    LineChart,
+    Resizable,
+    ScatterChart,
+    styler,
+    YAxis,
+    Legend
+} from "react-timeseries-charts";
+
 import {TimeSeries, TimeRange} from 'pondjs';
 import { format } from "d3-format";
 
@@ -9,7 +21,9 @@ const style = styler([
     {key: "co2Data", color: "#ecad48", width: 2},
     {key: "topTempData", color: "green", width: 1, opacity: 0.5},
     {key: "middleTempData", color: "#cfc793"},
-    {key: "bottomTempData", color: "steelblue", width: 1, opacity: 0.5}
+    {key: "bottomTempData", color: "steelblue", width: 1, opacity: 0.5},
+    {key: "leafCount", color: "#000000", radius: 1},
+    {key: "plantHeight", color: "#AA00BB", radius: 1}
 ]);
 
 export class TimeseriesChart extends React.PureComponent {
@@ -24,18 +38,21 @@ export class TimeseriesChart extends React.PureComponent {
                 label: "Temperature",
                 format: ",.1f",
                 series: null,
-                show: true
+                show: true,
+                type: "line"
             },
-            RHData: {units: "percent", label: "% RH", format: ",.1f", series: null, show: true},
-            co2Data: {units: "ppm", label: "CO2", format: "d", series: null, show: true},
-            topTempData: {units: "deg C", label: "Top Temp", format: "d", series: null, show: false},
-            middleTempData: {units: "deg C", label: "Mid Temp", format: "d", series: null, show: false},
-            bottomTempData: {units: "deg C", label: "Bottom Temp", format: "d", series: null, show: false}
+            RHData: {units: "percent", label: "% RH", format: ",.1f", series: null, show: true, type: "line"},
+            co2Data: {units: "ppm", label: "CO2", format: "d", series: null, show: true, type: "line"},
+            topTempData: {units: "deg C", label: "Top Temp", format: "d", series: null, show: false, type: "line"},
+            middleTempData: {units: "deg C", label: "Mid Temp", format: "d", series: null, show: false, type: "line"},
+            bottomTempData: {units: "deg C", label: "Bottom Temp", format: "d", series: null, show: false, type: "line"},
+            leafCount: {units: "", label:"Leaf Count", format:"d", series:null, show:false, type:"scatter"},
+            plantHeight: {units: "cm", label:"Plant Height", format:",.2f", series:null, show:false, type:"scatter"}
         };
 
 
         // Channel names list, in order we want them shown
-        const channelNames = ["tempData", "RHData", "co2Data", "topTempData", "middleTempData", "bottomTempData"];
+        const channelNames = ["tempData", "RHData", "co2Data", "topTempData", "middleTempData", "bottomTempData", "leafCount", "plantHeight"];
 
         // Default channels we'll actually display on our charts
         const displayChannels = [ "tempData", "RHData", "co2Data"];
@@ -123,8 +140,30 @@ export class TimeseriesChart extends React.PureComponent {
                                 sensorData["co2Data"] = co2Data;
                             }
 
-                        })
+                        });
                 })
+                // .then(() => {
+                //     // get the HorticultureDailyLogs
+                //     return fetch(process.env.REACT_APP_FLASK_URL + '/api/get_horticulture_daily_logs/', {
+                //         method: 'POST',
+                //         headers: {
+                //             'Accept': 'application/json',
+                //             'Content-Type': 'application/json',
+                //             'Access-Control-Allow-Origin': '*'
+                //         },
+                //         body: JSON.stringify({
+                //             'device_uuid': device_uuid
+                //         })
+                //     })
+                //         .then((response) => response.json())
+                //         .then((responseJson) => {
+                //             //console.log(responseJson)
+                //             if (responseJson["response_code"] == 200) {
+                //                 sensorData["plantHeight"] = responseJson["plant_height_results"];
+                //                 sensorData["leafCount"] = responseJson["leaf_count_results"];
+                //             }
+                //         });
+                // })
                 .then(() => {
                     console.log("About to parse data");
                     return this.parseData(this.state.displayChannels, this.state.channels, sensorData)
@@ -172,11 +211,19 @@ export class TimeseriesChart extends React.PureComponent {
                             newDisplayChannels.push(name);
                         }
                     }
-                    channels[name]["series"] = new TimeSeries({
-                        name: name,
-                        columns: ["time", name],
-                        points: dataEvents.reverse()
-                    });
+                    if(name === "plantHeight" || name === "leafCount") { // Temporary until we get a new API endpoint
+                        channels[name]["series"] = new TimeSeries({
+                            name: name,
+                            columns: ["time", name],
+                            points: dataEvents
+                        });
+                    } else {
+                        channels[name]["series"] = new TimeSeries({
+                            name: name,
+                            columns: ["time", name],
+                            points: dataEvents.reverse()
+                        });
+                    }
                     channels[name]["max"] = channels[name]["series"].max(name);
                     channels[name]["min"] = channels[name]["series"].min(name);
                     if (timeRange === null) {
@@ -221,18 +268,30 @@ export class TimeseriesChart extends React.PureComponent {
                         format={format}
                     />
                 );
-
-                charts.push(
-                    <LineChart
-                        key={`line-${channelName}`}
+                if(channels[channelName].type ==="line") {
+                    charts.push(
+                        <LineChart
+                            key={`line-${channelName}`}
+                            axis={`${channelName}_axis`}
+                            visible={channels[channelName].show}
+                            series={series}
+                            columns={[channelName]}
+                            style={style}
+                            breakLine
+                        />
+                    );
+                } else if (channels[channelName].type === "scatter") {
+                    charts.push(
+                        <ScatterChart
+                        key={`scatter-${channelName}`}
                         axis={`${channelName}_axis`}
                         visible={channels[channelName].show}
                         series={series}
                         columns={[channelName]}
                         style={style}
-                        breakLine
-                    />
-                );
+                        />
+                    );
+                }
             }
         }
         const trackerInfoValues = displayChannels

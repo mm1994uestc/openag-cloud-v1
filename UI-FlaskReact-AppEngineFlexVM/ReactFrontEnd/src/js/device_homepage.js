@@ -15,9 +15,7 @@ import {DeviceIsRunningModal} from './components/device_is_running_modal';
 
 import {TimeseriesChart} from "./components/timeseries_chart";
 
-import {ChartContainer, ChartRow, Charts, LineChart, Resizable, YAxis, styler, Legend} from "react-timeseries-charts";
-
-import {TimeEvent, TimeSeries} from 'pondjs';
+import {styler} from "react-timeseries-charts";
 
 import 'rc-slider/assets/index.css';
 import 'rc-tooltip/assets/bootstrap.css';
@@ -238,8 +236,8 @@ class DeviceHomepage extends Component {
     timeonChange(data_type, value) {
 
         this.changes[data_type] = value._d;
-        this.setState({[data_type]: value._d})
-        this.setState({changes: this.changes})
+        this.setState({[data_type]: value._d});
+        this.setState({changes: this.changes});
     }
 
     toggleDeviceModal = () => {
@@ -298,7 +296,7 @@ class DeviceHomepage extends Component {
                 console.error(error);
             });
 
-    }
+    };
     checkApply = () => {
         api.getCurrentRecipeInfo(
             this.props.cookies.get('user_token'),
@@ -312,7 +310,7 @@ class DeviceHomepage extends Component {
                 this.toggleEditMode()
             }
         });
-    }
+    };
 
     onSubmitDevice = (modal_state) => {
         console.log(JSON.stringify({
@@ -321,7 +319,7 @@ class DeviceHomepage extends Component {
             'device_reg_no': modal_state.device_reg_no,
             'device_notes': modal_state.device_notes,
             'device_type': modal_state.device_type
-        }))
+        }));
         return fetch(process.env.REACT_APP_FLASK_URL + '/api/register/', {
             method: 'POST',
             headers: {
@@ -353,7 +351,7 @@ class DeviceHomepage extends Component {
             .catch((error) => {
                 console.error(error);
             });
-    }
+    };
 
     LEDSpectrumSelection(led_data_type, color_channel, spectrum_type, value) {
 
@@ -602,8 +600,7 @@ class DeviceHomepage extends Component {
                             }
                         }
                     });
-                    let
-                        leaf_count_resultsData = responseJson["leaf_count_results"]
+                    let leaf_count_resultsData = responseJson["leaf_count_results"]
 
                     leaf_count_resultsData.forEach(function (d) {
                         d.value = parseFloat(d.value);
@@ -709,7 +706,7 @@ class DeviceHomepage extends Component {
 
     promptLabel = () => {
         return this.state.count + "> ";
-    }
+    };
 
     toggle_action_drop() {
         this.setState({action_isOpen: !this.state.action_isOpen})
