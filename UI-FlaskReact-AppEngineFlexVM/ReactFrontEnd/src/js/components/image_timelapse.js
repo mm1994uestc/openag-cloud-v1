@@ -29,7 +29,7 @@ export class ImageTimelapse extends React.PureComponent {
         } else {
             this.setState({disabled: false});
         }
-        this.setState({index: 0});
+        this.setState({index: nextProps.images.length -1});
     }
 
     render() {
