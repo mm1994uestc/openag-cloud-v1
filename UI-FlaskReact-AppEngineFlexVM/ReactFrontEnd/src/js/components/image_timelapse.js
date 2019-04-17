@@ -25,11 +25,10 @@ export class ImageTimelapse extends React.PureComponent {
         // access an out of range array index when switching
         // sources.
         if (!nextProps.images) {
-            this.setState({disabled: true});
+            this.setState({disabled: true, index: 0});
         } else {
-            this.setState({disabled: false});
+            this.setState({disabled: false, index: nextProps.images.length -1});
         }
-        this.setState({index: 0});
     }
 
     render() {
