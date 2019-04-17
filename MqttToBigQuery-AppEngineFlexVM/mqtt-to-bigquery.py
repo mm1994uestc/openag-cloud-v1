@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 
 """ This script reads data from the MQTT device events telemetry 
-    (actaully a PubSub) topic, 
-    and stores it in BiqQuery using the BigQuery batch API.
+    (actaully a PubSub) topic, and stores it in:
+    - BiqQuery using the BigQuery batch API.
+    - Datastore (realtime doc DB, used as cache of last 100 values).
+    - Storage (files, images, blobs).
+    - Firestore (doc DB, written by firebase cloud functions).
 """
 
 import os, sys, time, json, argparse, traceback, tempfile, logging, signal

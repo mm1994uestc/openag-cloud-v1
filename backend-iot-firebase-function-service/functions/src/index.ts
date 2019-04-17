@@ -161,12 +161,16 @@ export const saveImage = functions.https.onRequest((request, response) => {
     });
     //console.log("Saved image to gstorage:", file_name);
 
+    // get UTC timestamp
+    let TS = new Date().toISOString();
+
     // also save the fact we wrote a file to storage, in the firebase doc DB
     const doc = {
         bucket: BUCKET_NAME,
         file_name: file_name,
         URL: BUCKET_URL + file_name,
-        device_id: did
+        device_id: did,
+        timestamp: TS
     };
     images_db_ref.add( doc ).then( newdoc => {
         //console.log('Added image meta doc: ', doc);

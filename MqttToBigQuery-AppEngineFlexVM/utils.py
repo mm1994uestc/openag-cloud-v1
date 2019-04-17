@@ -2,6 +2,9 @@
 
 """ This file contains some utilities used for processing data and 
     writing data to Firebase doc DB, Storage, Datastore and BigQuery.
+
+Firestore docs:
+https://google-cloud-python.readthedocs.io/en/stable/firestore/collection.html
 """
 
 import os, time, logging, struct, sys, traceback, base64, ast
@@ -320,27 +323,80 @@ def deleteTurd( DS, deviceId, messageId ):
 
 
 # ------------------------------------------------------------------------------
-# 1. Get the image upload document from the firestore doc DB.
-# 2. Move the image from the storage upload bucket into the images one.
-# 3. Delete the fb doc and image in upload bucket.
-def moveImageUpdateFBDB(FB, CS, CS_BUCKET, file_name):
-
+# Get the image upload doc from the FB DB for this file.
+# Returns None if image not found, a doc otherwise.
+def getImageUploadFirestoreDoc(FB, file_name):
     docs_ref = FB.collection(u'deviceUploadedImages')
-
-# doc={'URL': 'https://storage.googleapis.com/openag-public-image-uploads/EDU-EFB0ECDE-c4-b3-01-8d-9b-8c_2019-04-12-T19:57:59Z_Camera-Top.png', 'device_id': 'EDU-EFB0ECDE-c4-b3-01-8d-9b-8c', 'file_name': 'EDU-EFB0ECDE-c4-b3-01-8d-9b-8c_2019-04-12-T19:57:59Z_Camera-Top.png', 'bucket': 'openag-public-image-uploads'}
-
-# DEBUG:root:data=b'{"messageType": "ImageUpload", "varName": "Camera-Top", "fileName": "EDU-EFB0ECDE-c4-b3-01-8d-9b-8c_2019-04-12-T19:57:59Z_Camera-Top.png"}'
 
     # query the collection for the file name (could be multiple if testing)
     query = docs_ref.where(u'file_name', u'==', file_name)
     docs = list(query.get())
     if not docs:
-        logging.error('moveImageUpdateFBDB: ERROR: '
-              'file "{}" not found.'.format(file_name))
-        return 
+        logging.warn('getImageUploadFirestoreDoc: doc for file "{}" not found.'.format(file_name))
+        return None
     
-    # get the single matching doc
+    # get the single matching doc, and return it.
     doc = docs[0]
+    return doc
+
+# doc={'URL': 'https://storage.googleapis.com/openag-public-image-uploads/EDU-EFB0ECDE-c4-b3-01-8d-9b-8c_2019-04-12-T19:57:59Z_Camera-Top.png', 'device_id': 'EDU-EFB0ECDE-c4-b3-01-8d-9b-8c', 'file_name': 'EDU-EFB0ECDE-c4-b3-01-8d-9b-8c_2019-04-12-T19:57:59Z_Camera-Top.png', 'bucket': 'openag-public-image-uploads'}
+
+
+# ------------------------------------------------------------------------------
+# Check if the file is in the uploads bucket yet (can take a bit for file to
+# show up in the bucket).
+# Returns True or False.
+def isUploadedImageInBucket(FB, CS, file_name):
+    doc = getImageUploadFirestoreDoc(FB, file_name)
+    if doc == None:
+        logging.debug("isUploadedImageInBucket: file={} NOT in doc".format(file_name))
+        return False
+
+    # Get doc properties
+    keyd = doc.to_dict()
+    src_bucket_name = keyd['bucket']
+    file_name = keyd['file_name']
+    #URL = keyd['URL']
+    #device_id = keyd['device_id']
+
+    # Check the storage upload bucket for this file
+    src_bucket = CS.get_bucket(src_bucket_name)
+    src_image = src_bucket.get_blob(file_name)
+    if src_image is None:
+        logging.debug("isUploadedImageInBucket: file NOT in bucket={}".format(file_name))
+        return False # image not in bucket (yet)
+
+    logging.debug("isUploadedImageInBucket: file in bucket={}".format(file_name))
+    return True # image is here
+
+
+# ------------------------------------------------------------------------------
+def markUploadedImageVerified(FB, file_name, var_name):
+    doc = getImageUploadFirestoreDoc(FB, file_name)
+    if doc == None:
+        logging.debug("markUploadedImageVerified: file={} NOT in doc".format(file_name))
+        return False
+
+    # Mark firestore device state as verified.
+    # (can only call update on a DocumentReference)
+    doc_ref = doc.reference
+    doc_ref.update({u'verified': u'true',
+                    u'var_name': var_name})
+    logging.debug("markUploadedImageVerified: doc verified={}".format(doc))
+
+    return True
+
+
+# ------------------------------------------------------------------------------
+# 1. Get the image upload document from the firestore doc DB.
+# 2. Move the image from the storage upload bucket into the images one.
+# 3. Delete the fb doc and image in upload bucket.
+def moveUploadedImageAndCleanUpDoc(FB, CS, CS_BUCKET, file_name):
+    doc = getImageUploadFirestoreDoc(FB, file_name)
+    if doc == None:
+        logging.debug("moveUploadedImageAndCleanUpDoc: file={} NOT in doc".format(file_name))
+        return False
+
     keyd = doc.to_dict()
     src_bucket = keyd['bucket']
     file_name = keyd['file_name']
@@ -350,9 +406,11 @@ def moveImageUpdateFBDB(FB, CS, CS_BUCKET, file_name):
     # delete this document
     doc_ref = doc.reference
     doc_ref.delete() 
+    logging.debug("moveUploadedImageAndCleanUpDoc: deleted doc")
 
     # move the file(s) and delete the docs (cleans up dupes)
     publicURL = copyAndDeleteFileInCloudStorage(CS, src_bucket, CS_BUCKET, file_name)
+    logging.debug("moveUploadedImageAndCleanUpDoc: URL={}".format(publicURL))
 
     return publicURL
 
@@ -362,7 +420,7 @@ def moveImageUpdateFBDB(FB, CS, CS_BUCKET, file_name):
 # (in an open and un-secured manner) to a GCP bucket via a public
 # firebase cloud function.  
 # This is just a message telling us it was done (over the secure IoT 
-# messaging) and gives us a hook to move the image and update the BQ, DS.
+# messaging) and gives us a hook to mark the image as verified. And then later do something with it.
 def handle_uploaded_image( CS, DS, BQ, FB, pydict, deviceId, PROJECT, 
         DATASET, TABLE, CS_BUCKET ):
     try:
@@ -378,36 +436,73 @@ def handle_uploaded_image( CS, DS, BQ, FB, pydict, deviceId, PROJECT,
 
         varName =  pydict[ varName_KEY ]
         fileName = pydict[ fileName_KEY ]
-#debugrob: looks like this gets the message before the file is in the storage bucket some times.   
-# Put the file & var in a list to be processed later?
-# Queue them up in DS?
 
-        # Move image from one gstorage bucket to another:
-        #   openag-public-image-uploads to openag-v1-images.
-        # Delete the firebase db doc that has this file name in it.
-        publicURL = moveImageUpdateFBDB(FB, CS, CS_BUCKET, fileName)
-
-        # Put the URL in the datastore for the UI to use.
-        saveImageURLtoDatastore(DS, deviceId, publicURL, varName)
-
-        # Put the URL as an env. var in BQ.
-        message_obj = {}
-        # keep old message type, UI code may depend on it
-        message_obj[ messageType_KEY ] = messageType_Image
-        message_obj[ var_KEY ] = varName
-        valuesJson = "{'values':["
-        valuesJson += "{'name':'URL', 'type':'str', 'value':'%s'}" % \
-                            ( publicURL )
-        valuesJson += "]}"
-        message_obj[ values_KEY ] = valuesJson
-        bq_data_insert( BQ, message_obj, deviceId, PROJECT, DATASET, TABLE )
-
-#debugrob: remove any files in openag-public-image-uploads that are over an hour old
+#debugrob: there is a race condition between the FB cloud function and this message.  The document (and file) are not uploaded/created by the function when this MQTT message is received.
+        # Just mark the document in firestore as "verified" 
+        markUploadedImageVerified(FB, fileName, varName)
 
     except Exception as e:
         exc_type, exc_value, exc_traceback = sys.exc_info()
         logging.critical( "Exception in handle_uploaded_image(): %s" % e)
         traceback.print_tb( exc_traceback, file=sys.stdout )
+
+
+#------------------------------------------------------------------------------
+# 1. Read all the docs in the FB image uploads collections.
+# 2. For each doc that has been verified (MQTT message received from brain),
+#    check if the file has been uploaded to the bucket.
+# 3. If file is uploaded then move to new bucket and delete doc.
+def checkImageUploads(CS, DS, BQ, FB, deviceId, \
+        PROJECT, DATASET, TABLE, CS_BUCKET ):
+    docs_ref = FB.collection(u'deviceUploadedImages')
+    snaps = docs_ref.get()  # get all snapshots
+    for snap in snaps:
+        logging.debug("checkImageUploads: snap={}".format(snap))
+        verified = False
+        src_bucket_name = None
+        file_name = None
+        var_name = None
+
+#debugrob: instead of checking for verified, why not check if the file in the doc is in the uploads?   OR!!  the MQTT message can create a new doc?  too complex???
+
+        try:
+            snap.get('verified') # will cause an exception if property missing
+            src_bucket_name = snap.get('bucket')
+            file_name = snap.get('file_name')
+            var_name = snap.get('var_name')
+            verified = True
+        except:
+            logging.debug("checkImageUploads: NOT verified snap={}".format(snap))
+            continue # the above snapshot doesn't have the property
+
+        if verified:
+            # Check if the file has been uploaded to the bucket.
+            if isUploadedImageInBucket(FB, CS, file_name):
+
+                # Move image from one gstorage bucket to another:
+                #   openag-public-image-uploads to openag-v1-images.
+                # Delete the firebase db doc that has this file name in it.
+                publicURL = moveUploadedImageAndCleanUpDoc(FB, CS, CS_BUCKET, file_name)
+
+                # Put the URL in the datastore for the UI to use.
+                saveImageURLtoDatastore(DS, deviceId, publicURL, var_name)
+
+                # Put the URL as an env. var in BQ.
+                message_obj = {}
+                # keep old message type, UI code may depend on it
+                message_obj[ messageType_KEY ] = messageType_Image
+                message_obj[ var_KEY ] = var_name
+                valuesJson = "{'values':["
+                valuesJson += "{'name':'URL', 'type':'str', 'value':'%s'}" % \
+                                    ( publicURL )
+                valuesJson += "]}"
+                message_obj[ values_KEY ] = valuesJson
+                bq_data_insert( BQ, message_obj, deviceId, PROJECT, DATASET, TABLE )
+
+#TODO: 
+# remove any files in openag-public-image-uploads that are over 2 hours old
+# remove any docs in firestore that are over 2 hours old
+
 
 #------------------------------------------------------------------------------
 # Parse and save the image.
@@ -666,7 +761,7 @@ def save_data_to_Device( DS, pydict, deviceId ):
 def save_data( CS, DS, BQ, FB, pydict, deviceId, \
         PROJECT, DATASET, TABLE, CS_BUCKET ):
 
-    #TODO, deprecated code block below, remove when all devices are updated to latest code as of April 30, 2019.
+    #TODO, deprecated code block below, remove when all devices are updated to latest code as of June 30, 2019 (or there abouts).
     if messageType_Image == validateMessageType( pydict ):
         save_image( CS, DS, BQ, pydict, deviceId, PROJECT, DATASET, TABLE, 
                 CS_BUCKET )
@@ -676,9 +771,14 @@ def save_data( CS, DS, BQ, FB, pydict, deviceId, \
     if messageType_ImageUpload == validateMessageType( pydict ):
         handle_uploaded_image( CS, DS, BQ, FB, pydict, deviceId, PROJECT, 
                 DATASET, TABLE, CS_BUCKET )
-        return 
 
-#debugrob: for every message, check the queue and see if we can process images
+    # Check if we have uploaded images that are verified and ready to process.
+    checkImageUploads(CS, DS, BQ, FB, deviceId, \
+        PROJECT, DATASET, TABLE, CS_BUCKET )
+
+    if messageType_Image == validateMessageType( pydict ) or \
+       messageType_ImageUpload == validateMessageType( pydict ):
+        return;
 
     # Save the most recent data as properties on the Device entity in the
     # datastore.
