@@ -1,7 +1,6 @@
 import React, {Component} from 'react';
 import '../scss/device_homepage.scss';
-import {Cookies, withCookies} from "react-cookie";
-import {$, jQuery} from 'jquery';
+import {withCookies} from "react-cookie";
 // import Draggable from 'react-draggable';
 import Plot from 'react-plotly.js';
 import 'rc-time-picker/assets/index.css';
@@ -13,13 +12,12 @@ import {DevicesDropdown} from './components/devices_dropdown';
 import {AddAccessCodeModal} from './components/add_access_code_modal';
 import {AddDeviceModal} from './components/add_device_modal';
 import {DeviceIsRunningModal} from './components/device_is_running_modal';
-import {
-    Dropdown,
-    DropdownToggle,
-    DropdownMenu,
-    Button,
-    DropdownItem
-} from 'reactstrap';
+
+import {TimeseriesChart} from "./components/timeseries_chart";
+
+import {ChartContainer, ChartRow, Charts, LineChart, Resizable, YAxis, styler, Legend} from "react-timeseries-charts";
+
+import {TimeEvent, TimeSeries} from 'pondjs';
 
 import 'rc-slider/assets/index.css';
 import 'rc-tooltip/assets/bootstrap.css';
@@ -66,6 +64,15 @@ const displayNamesLookup = {
 
 }
 
+const style = styler([
+    { key: "air_temp", color: "#008BC2", width: 2},
+    { key: "rh", color: "#95266A", width: 2 },
+    { key: "value", color: "#ff47ff" },
+    { key: "power", color: "green", width: 1, opacity: 0.5 },
+    { key: "temperature", color: "#cfc793" },
+    { key: "speed", color: "steelblue", width: 1, opacity: 0.5 }
+]);
+
 class DeviceHomepage extends Component {
     constructor(props) {
         super(props);
@@ -97,6 +104,7 @@ class DeviceHomepage extends Component {
                 'off_selected_spectrum': "flat",
                 "on_selected_spectrum": "flat"
             },
+            temp_series: null,
             temp_data_x: [],
             temp_data_y: [],
             co2_data_x: [],
@@ -139,7 +147,9 @@ class DeviceHomepage extends Component {
             edit_mode: false,
             selectedAction: 'Select an action',
             BCC: false,
+            sensorValues: {}
         };
+
         this.child = {
             console: Console
         };
@@ -147,10 +157,10 @@ class DeviceHomepage extends Component {
         this.changes = {led_panel_dac5578: {}, led_panel_dac5578: {}}
         this.getUserDevices = this.getUserDevices.bind(this);
         this.getCurrentStats = this.getCurrentStats.bind(this);
-        this.getTempDetails = this.getTempDetails.bind(this);
-        this.getCO2Details = this.getCO2Details.bind(this);
-        this.toggleRHData = this.toggleRHData.bind(this);
-        this.toggleTempData = this.toggleTempData.bind(this);
+        //this.getTempDetails = this.getTempDetails.bind(this);
+        //this.getCO2Details = this.getCO2Details.bind(this);
+        //this.toggleRHData = this.toggleRHData.bind(this);
+        //this.toggleTempData = this.toggleTempData.bind(this);
         this.handleColorChange = this.handleColorChange.bind(this);
         this.modalToggle = this.modalToggle.bind(this);
         this.sensorOnChange = this.sensorOnChange.bind(this);
@@ -177,7 +187,7 @@ class DeviceHomepage extends Component {
 
         let standard_day = this.state.current_recipe['environments']['standard_day']
         let standard_night = this.state.current_recipe['environments']['standard_night']
-        console.log(standard_day)
+        //console.log(standard_day)
         let led_data = {
             'on_illumination_distance': standard_day['light_illumination_distance_cm'],
             "off_selected_spectrum": standard_night["spectrum_key"],
@@ -276,7 +286,7 @@ class DeviceHomepage extends Component {
             })
         }).then((response) => response.json())
             .then((responseJson) => {
-                console.log(responseJson)
+                //console.log(responseJson)
                 if (responseJson["response_code"] == 200) {
                     this.setState({plant_height: ""})
                     this.setState({leaves_count: ""})
@@ -330,7 +340,7 @@ class DeviceHomepage extends Component {
         })
             .then((response) => response.json())
             .then((responseJson) => {
-                console.log(responseJson)
+                //console.log(responseJson)
                 if (responseJson["response_code"] == 200) {
                     this.toggleDeviceModal();
                     this.getUserDevices()
@@ -386,8 +396,7 @@ class DeviceHomepage extends Component {
 
         if (e.target.name.indexOf("sensor") >= 0) {
             this.setState({[e.target.name + "_border"]: "3px solid #883c63"})
-        }
-        else {
+        } else {
             this.setState({[e.target.name + "_border"]: "1px solid rgba(0, 0, 0, 0.125)"})
         }
         this.changes[e.target.name] = e.target.value;
@@ -424,14 +433,15 @@ class DeviceHomepage extends Component {
         })
             .then((response) => response.json())
             .then((responseJson) => {
-                console.log(responseJson)
+                //console.log(responseJson)
                 if (responseJson["response_code"] == 200) {
-                    this.setState({current_temp: responseJson["results"]["current_temp"]})
-                    this.setState({current_rh: responseJson["results"]["current_rh"]})
-                    this.setState({current_co2: responseJson["results"]["current_co2"]})
-                    this.setState({top_temp: responseJson["results"]["top_h2o_temp"]})
-                    this.setState({middle_temp: responseJson["results"]["middle_h2o_temp"]})
-                    this.setState({bottom_temp: responseJson["results"]["bottom_h2o_temp"]})
+                    this.setState({current_temp: responseJson["results"]["current_temp"]});
+                    this.setState({current_rh: responseJson["results"]["current_rh"]});
+                    this.setState({current_co2: responseJson["results"]["current_co2"]});
+                    this.setState({top_temp: responseJson["results"]["top_h2o_temp"]});
+                    this.setState({middle_temp: responseJson["results"]["middle_h2o_temp"]});
+                    this.setState({bottom_temp: responseJson["results"]["bottom_h2o_temp"]});
+                    this.setState({sensorValues: responseJson["results"]}); // Added by SRM
 
                     this.statecopy = this.state;
                 }
@@ -451,12 +461,12 @@ class DeviceHomepage extends Component {
                 'Access-Control-Allow-Origin': '*'
             },
             body: JSON.stringify({
-                                      'user_token': this.props.cookies.get('user_token')
-    })
-    })
-    .then((response) => response.json())
+                'user_token': this.props.cookies.get('user_token')
+            })
+        })
+            .then((response) => response.json())
             .then((responseJson) => {
-                console.log(responseJson)
+                //console.log(responseJson)
                 if (responseJson["response_code"] == 200) {
                     const devices = responseJson["results"]["devices"];
                     let devices_map = new Map();
@@ -472,7 +482,7 @@ class DeviceHomepage extends Component {
                             this.onSelectDevice(devices[0].device_uuid)
                         }
                     });
-                    console.log("Response", responseJson["results"])
+                   // console.log("Response", responseJson["results"])
                 } else {
                     this.setState({
                         selected_device: 'No Devices',
@@ -532,75 +542,6 @@ class DeviceHomepage extends Component {
             });
     }
 
-    getCO2Details(device_uuid) {
-        return fetch(process.env.REACT_APP_FLASK_URL + '/api/get_co2_details/', {
-            method: 'POST',
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*'
-            },
-            body: JSON.stringify({
-                'selected_device_uuid': device_uuid
-            })
-        })
-
-            .then((response) => response.json())
-            .then((responseJson) => {
-                console.log(responseJson)
-                if (responseJson["response_code"] == 200) {
-
-                    let co2Data = responseJson["results"]
-
-                    co2Data.forEach(function (d) {
-                        d.value = parseFloat(d.value);
-                    });
-
-                    let co2_data_x = []
-                    let co2_data_y = []
-                    co2Data.forEach(function (d) {
-                        co2_data_x.push(d.time);
-                        co2_data_y.push(d.value);
-                    });
-                    this.setState({'co2_data_x': co2_data_x})
-                    this.setState({'co2_data_y': co2_data_y})
-                    this.setState({
-                        'co2_data': [{
-                            type: "scatter",
-                            mode: "lines+markers",
-                            name: '',
-                            x: co2_data_x,
-                            y: co2_data_y,
-                            line: {color: '#ECAD48'}
-                        }]
-                    });
-
-                    this.setState({
-                        'co2_layout': {
-                            width: 350,
-                            height: 450,
-                            xaxis: {
-                                autorange: true,
-                                tickformat: '%Y-%m-%dH:%M:%S',
-                                rangeInput: {
-                                    type: 'date'
-                                }
-                            },
-                            yaxis: {
-                                autorange: true,
-                                type: 'linear'
-                            }
-                        }
-                    });
-
-                }
-
-            })
-            .catch((error) => {
-                console.error(error);
-            });
-    }
-
     getHorticultureDailyLogs(device_uuid) {
         return fetch(process.env.REACT_APP_FLASK_URL + '/api/get_horticulture_daily_logs/', {
             method: 'POST',
@@ -616,7 +557,7 @@ class DeviceHomepage extends Component {
 
             .then((response) => response.json())
             .then((responseJson) => {
-                console.log(responseJson)
+                //console.log(responseJson)
                 if (responseJson["response_code"] == 200) {
 
                     let plant_height_resultsData = responseJson["plant_height_results"]
@@ -714,185 +655,6 @@ class DeviceHomepage extends Component {
                 console.error(error);
             });
     }
-
-    getTempDetails(device_uuid) {
-        return fetch(process.env.REACT_APP_FLASK_URL + '/api/get_temp_details/', {
-            method: 'POST',
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*'
-            },
-            body: JSON.stringify({
-                'selected_device_uuid': device_uuid
-            })
-        })
-            .then((response) => response.json())
-            .then((responseJson) => {
-                console.log(responseJson)
-                if (responseJson["response_code"] == 200) {
-
-                    let tempData = responseJson["results"]["temp"]
-                    let RHData = responseJson["results"]["RH"]
-                    let topTempData = responseJson["results"]["top_h2o_temp"]
-                    let middleTempData = responseJson["results"]["middle_h2o_temp"]
-                    let bottomTempData = responseJson["results"]["bottom_h2o_temp"]
-
-                    tempData.forEach(function (d) {
-                        d.value = parseFloat(d.value);
-                    });
-                    RHData.forEach(function (d) {
-                        d.value = parseFloat(d.value)
-                    });
-                    topTempData.forEach(function (d) {
-                        d.value = parseFloat(d.value);
-                    });
-                    middleTempData.forEach(function (d) {
-                        d.value = parseFloat(d.value);
-                    });
-                    bottomTempData.forEach(function (d) {
-                        d.value = parseFloat(d.value);
-                    });
-
-                    let rh_data_x = []
-                    let rh_data_y = []
-                    RHData.forEach(function (d) {
-                        rh_data_x.push(d.time);
-                        rh_data_y.push(d.value);
-                    });
-                    this.setState({'rh_data_x': rh_data_x})
-                    this.setState({'rh_data_y': rh_data_y})
-                    this.setState({
-                        'rh_data': [{
-                            type: "scatter",
-                            mode: "lines",
-                            name: '',
-                            x: rh_data_x,
-                            y: rh_data_y,
-                            line: {color: '#95266A'}
-                        }]
-                    });
-
-                    this.setState({
-                        'rh_layout': {
-                            width: 350,
-                            height: 450,
-                            xaxis: {
-                                autorange: true,
-                                tickformat: '%Y-%m-%dH:%M:%S',
-                                rangeInput: {
-                                    type: 'date'
-                                }
-                            },
-                            yaxis: {
-                                autorange: true,
-                                type: 'linear'
-                            }
-                        }
-                    });
-
-                    let temp_data_x = []
-                    let temp_data_y = []
-                    tempData.forEach(function (d) {
-                        temp_data_x.push(d.time);
-                        temp_data_y.push(d.value);
-                    });
-                    this.setState({'temp_data_x': temp_data_x})
-                    this.setState({'temp_data_y': temp_data_y})
-                    this.setState({
-                        'temp_data': [{
-                            type: "scatter",
-                            mode: "lines+markers",
-                            name: '',
-                            x: temp_data_x,
-                            y: temp_data_y,
-                            line: {color: '#008BC2'}
-                        }]
-                    });
-
-                    let top_temp_data_x = []
-                    let top_temp_data_y = []
-                    topTempData.forEach(function (d) {
-                        top_temp_data_x.push(d.time);
-                        top_temp_data_y.push(d.value);
-                    });
-                    this.setState({'top_temp_data_x': top_temp_data_x})
-                    this.setState({'top_temp_data_y': top_temp_data_y})
-                    this.setState({
-                        'top_temp_data': [{
-                            type: "scatter",
-                            mode: "lines+markers",
-                            name: '',
-                            x: top_temp_data_x,
-                            y: top_temp_data_y,
-                            line: {color: '#008BC2'}
-                        }]
-                    });
-
-                    let middle_temp_data_x = []
-                    let middle_temp_data_y = []
-                    middleTempData.forEach(function (d) {
-                        middle_temp_data_x.push(d.time);
-                        middle_temp_data_y.push(d.value);
-                    });
-                    this.setState({'middle_temp_data_x': middle_temp_data_x})
-                    this.setState({'middle_temp_data_y': middle_temp_data_y})
-                    this.setState({
-                        'middle_temp_data': [{
-                            type: "scatter",
-                            mode: "lines+markers",
-                            name: '',
-                            x: middle_temp_data_x,
-                            y: middle_temp_data_y,
-                            line: {color: '#008BC2'}
-                        }]
-                    });
-
-                    let bottom_temp_data_x = []
-                    let bottom_temp_data_y = []
-                    bottomTempData.forEach(function (d) {
-                        bottom_temp_data_x.push(d.time);
-                        bottom_temp_data_y.push(d.value);
-                    });
-                    this.setState({'bottom_temp_data_x': bottom_temp_data_x})
-                    this.setState({'bottom_temp_data_y': bottom_temp_data_y})
-                    this.setState({
-                        'bottom_temp_data': [{
-                            type: "scatter",
-                            mode: "lines+markers",
-                            name: '',
-                            x: bottom_temp_data_x,
-                            y: bottom_temp_data_y,
-                            line: {color: '#008BC2'}
-                        }]
-                    });
-
-                    this.setState({
-                        'temp_layout': {
-                            width: 350,
-                            height: 450,
-                            xaxis: {
-                                autorange: true,
-                                tickformat: '%Y-%m-%dH:%M:%S',
-                                rangeInput: {
-                                    type: 'date'
-                                }
-                            },
-                            yaxis: {
-                                autorange: true,
-                                type: 'linear'
-                            }
-                        }
-                    });
-
-                    this.setState({'show_temp_line': true})
-                }
-            })
-            .catch((error) => {
-                console.error(error);
-            });
-    }
-
     getRecipeOnDevice(device_uuid) {
         return fetch(process.env.REACT_APP_FLASK_URL + '/api/get_current_recipe/', {
             method: 'POST',
@@ -918,15 +680,6 @@ class DeviceHomepage extends Component {
             });
     }
 
-
-    toggleTempData() {
-        this.setState({'show_temp_line': !this.state.show_temp_line})
-    }
-
-    toggleRHData() {
-        this.setState({'show_rh_line': !this.state.show_rh_line})
-    }
-
     onSelectDevice = (device_uuid) => {
         if (device_uuid != this.state.selected_device_uuid) {
             const device = this.state.user_devices.get(device_uuid);
@@ -940,13 +693,11 @@ class DeviceHomepage extends Component {
                 current_co2: 'Loading'
             }, this.saveSelectedDevice);
 
-            this.getTempDetails(device_uuid);
-            this.getCO2Details(device_uuid);
             this.getCurrentStats(device_uuid);
             this.getRecipeOnDevice(device_uuid);
             this.getHorticultureDailyLogs(device_uuid);
         }
-    }
+    };
 
     echo(text) {
 
@@ -1052,8 +803,7 @@ class DeviceHomepage extends Component {
                 if (keyName !== "led_panel_dac5578" && keyName !== "led_panel_dac5578") {
                     return <div className="row"><p key={keyName}>{displayNamesLookup[keyName]}
                         : {changeJson[keyName].toString()}</p><br/></div>
-                }
-                else if ((keyName === "led_panel_dac5578" || keyName === "led_panel_dac5578") && changeJson[keyName]) {
+                } else if ((keyName === "led_panel_dac5578" || keyName === "led_panel_dac5578") && changeJson[keyName]) {
 
 
                     let list_led = [<p key={keyName}>Color channel information for {displayNamesLookup[keyName]}</p>]
@@ -1141,205 +891,149 @@ class DeviceHomepage extends Component {
                     </div>
 
                     {this.state.BCC ? null :
-                    <div className="col-md-4">
-                        <div className="card current-stats-card">
-                            <div className="card-block">
-                                <h4 className="card-title "> CO2 </h4>
-                                <div className="card-text">
-                                    <div className="graph">
-                                        <div className="knob_data">{this.state.current_co2}
+                        <div className="col-md-4">
+                            <div className="card current-stats-card">
+                                <div className="card-block">
+                                    <h4 className="card-title "> CO2 </h4>
+                                    <div className="card-text">
+                                        <div className="graph">
+                                            <div className="knob_data">{this.state.current_co2}
+                                            </div>
+                                            <span className="txt_smaller"><sup>o</sup>ppm (Parts per million) </span>
                                         </div>
-                                        <span className="txt_smaller"><sup>o</sup>ppm (Parts per million) </span>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
                     }
                 </div>
 
-
-                <div className="row graphs-row">
-                    {/*<Draggable cancel="strong">*/}
-                    <div className="col-md-4">
-                        <div className="card value-card">
-                            <div className="card-block">
-                                <h4 className="card-title "> Air Temperature </h4>
-                                <div className="row plot-row" style={{display: 'block'}}>
-                                    <strong className="no-cursor"> <Plot data={this.state.temp_data}
-                                                                         layout={this.state.temp_layout}
-                                                                         onInitialized={(figure) => this.setState(figure)}
-                                                                         onUpdate={(figure) => this.setState(figure)}/>
-                                    </strong>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-
-                    {/*</Draggable>*/}
-                    {/*<Draggable cancel="strong">*/}
-                    <div className="col-md-4">
-
-                        <div className="card value-card">
-                            <div className="card-block">
-                                <h4 className="card-title "> Relative Humidity </h4>
-
-                                <div className="row plot-row" style={{display: 'block'}}>
-                                    <strong className="no-cursor"> <Plot data={this.state.rh_data}
-                                                                         layout={this.state.rh_layout}
-                                                                         onInitialized={(figure) => this.setState(figure)}
-                                                                         onUpdate={(figure) => this.setState(figure)}/>
-                                    </strong>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {this.state.BCC ? null :
-                    <div className="col-md-4">
-                        <div className="card value-card">
-                            <div className="card-block">
-                                <h4 className="card-title "> CO2 </h4>
-
-                                <div className="row plot-row" style={{display: 'block'}}>
-                                    <strong className="no-cursor"> <Plot data={this.state.co2_data}
-                                                                         layout={this.state.co2_layout}
-                                                                         onInitialized={(figure) => this.setState(figure)}
-                                                                         onUpdate={(figure) => this.setState(figure)}
-                                                                         config={this.state.config}/>
-                                    </strong>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    }
-                </div>
+                <TimeseriesChart device_uuid={this.state.selected_device_uuid} />
 
                 {this.state.BCC ? <div>
-                <div className="row graphs-row">
-                    <div className="col-md-4">
-                        <div className="card current-stats-card">
-                            <div className="card-block">
-                                <h4 className="card-title "> Top H2O Temperature </h4>
-                                <div className="card-text">
-                                    <div className="graph">
-                                        <div className="knob_data">{this.state.top_temp}
+                        <div className="row graphs-row">
+                            <div className="col-md-4">
+                                <div className="card current-stats-card">
+                                    <div className="card-block">
+                                        <h4 className="card-title "> Top H2O Temperature </h4>
+                                        <div className="card-text">
+                                            <div className="graph">
+                                                <div className="knob_data">{this.state.top_temp}
+                                                </div>
+                                                <span className="txt_smaller"><sup>o</sup>C (Celsius) </span>
+                                            </div>
                                         </div>
-                                        <span className="txt_smaller"><sup>o</sup>C (Celsius) </span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="col-md-4">
+                                <div className="card current-stats-card">
+                                    <div className="card-block">
+                                        <h4 className="card-title "> Middle H2O Temperature </h4>
+                                        <div className="card-text">
+                                            <div className="graph">
+                                                <div className="knob_data">{this.state.middle_temp}
+                                                </div>
+                                                <span className="txt_smaller"><sup>o</sup>C (Celsius) </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="col-md-4">
+                                <div className="card current-stats-card">
+                                    <div className="card-block">
+                                        <h4 className="card-title "> Bottom H2O Temperature </h4>
+                                        <div className="card-text">
+                                            <div className="graph">
+                                                <div className="knob_data">{this.state.bottom_temp}
+                                                </div>
+                                                <span className="txt_smaller"><sup>o</sup>C (Celsius) </span>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
-                    <div className="col-md-4">
-                        <div className="card current-stats-card">
-                            <div className="card-block">
-                                <h4 className="card-title "> Middle H2O Temperature </h4>
-                                <div className="card-text">
-                                    <div className="graph">
-                                        <div className="knob_data">{this.state.middle_temp}
+                        <div className="row graphs-row">
+                            <div className="col-md-4">
+                                <div className="card value-card">
+                                    <div className="card-block">
+                                        <h4 className="card-title "> Top H2O Temperature </h4>
+                                        <div className="row plot-row" style={{display: 'block'}}>
+                                            <strong className="no-cursor"> <Plot data={this.state.top_temp_data}
+                                                                                 layout={this.state.temp_layout}
+                                                                                 onInitialized={(figure) => this.setState(figure)}
+                                                                                 onUpdate={(figure) => this.setState(figure)}/>
+                                            </strong>
                                         </div>
-                                        <span className="txt_smaller"><sup>o</sup>C (Celsius) </span>
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                    </div>
-                    <div className="col-md-4">
-                        <div className="card current-stats-card">
-                            <div className="card-block">
-                                <h4 className="card-title "> Bottom H2O Temperature </h4>
-                                <div className="card-text">
-                                    <div className="graph">
-                                        <div className="knob_data">{this.state.bottom_temp}
-                                        </div>
-                                        <span className="txt_smaller"><sup>o</sup>C (Celsius) </span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div className="row graphs-row">
-                    <div className="col-md-4">
-                        <div className="card value-card">
-                            <div className="card-block">
-                                <h4 className="card-title "> Top H2O Temperature </h4>
-                                <div className="row plot-row" style={{display: 'block'}}>
-                                    <strong className="no-cursor"> <Plot data={this.state.top_temp_data}
-                                                                         layout={this.state.temp_layout}
-                                                                         onInitialized={(figure) => this.setState(figure)}
-                                                                         onUpdate={(figure) => this.setState(figure)}/>
-                                    </strong>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div className="col-md-4">
-                        <div className="card value-card">
-                            <div className="card-block">
-                                <h4 className="card-title "> Middle H2O Temperature </h4>
+                            <div className="col-md-4">
+                                <div className="card value-card">
+                                    <div className="card-block">
+                                        <h4 className="card-title "> Middle H2O Temperature </h4>
 
-                                <div className="row plot-row" style={{display: 'block'}}>
-                                    <strong className="no-cursor"> <Plot data={this.state.middle_temp_data}
-                                                                         layout={this.state.temp_layout}
-                                                                         onInitialized={(figure) => this.setState(figure)}
-                                                                         onUpdate={(figure) => this.setState(figure)}/>
-                                    </strong>
+                                        <div className="row plot-row" style={{display: 'block'}}>
+                                            <strong className="no-cursor"> <Plot data={this.state.middle_temp_data}
+                                                                                 layout={this.state.temp_layout}
+                                                                                 onInitialized={(figure) => this.setState(figure)}
+                                                                                 onUpdate={(figure) => this.setState(figure)}/>
+                                            </strong>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    </div>
-                    <div className="col-md-4">
-                        <div className="card value-card">
-                            <div className="card-block">
-                                <h4 className="card-title "> Bottom H2O Temperature </h4>
+                            <div className="col-md-4">
+                                <div className="card value-card">
+                                    <div className="card-block">
+                                        <h4 className="card-title "> Bottom H2O Temperature </h4>
 
-                                <div className="row plot-row" style={{display: 'block'}}>
-                                    <strong className="no-cursor"> <Plot data={this.state.bottom_temp_data}
-                                                                         layout={this.state.temp_layout}
-                                                                         onInitialized={(figure) => this.setState(figure)}
-                                                                         onUpdate={(figure) => this.setState(figure)}/>
-                                    </strong>
+                                        <div className="row plot-row" style={{display: 'block'}}>
+                                            <strong className="no-cursor"> <Plot data={this.state.bottom_temp_data}
+                                                                                 layout={this.state.temp_layout}
+                                                                                 onInitialized={(figure) => this.setState(figure)}
+                                                                                 onUpdate={(figure) => this.setState(figure)}/>
+                                            </strong>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
-                </div>
-                </div>
-                : 
-                <div className="row graphs-row">
-                    {/*<Draggable cancel="strong">*/}
-                    <div className="col-md-4">
-                        <div className="card value-card">
-                            <div className="card-block">
-                                <h4 className="card-title "> Plant Height </h4>
-                                <div className="row plot-row" style={{display: 'block'}}>
-                                    <strong className="no-cursor"> <Plot data={this.state.plant_height_results_data}
-                                                                         layout={this.state.plant_height_results_layout}
-                                                                         onInitialized={(figure) => this.setState(figure)}
-                                                                         onUpdate={(figure) => this.setState(figure)}/>
-                                    </strong>
+                    :
+                    <div className="row graphs-row">
+                        {/*<Draggable cancel="strong">*/}
+                        <div className="col-md-4">
+                            <div className="card value-card">
+                                <div className="card-block">
+                                    <h4 className="card-title "> Plant Height </h4>
+                                    <div className="row plot-row" style={{display: 'block'}}>
+                                        <strong className="no-cursor"> <Plot data={this.state.plant_height_results_data}
+                                                                             layout={this.state.plant_height_results_layout}
+                                                                             onInitialized={(figure) => this.setState(figure)}
+                                                                             onUpdate={(figure) => this.setState(figure)}/>
+                                        </strong>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                     </div>
-                     <div className="col-md-4">
-                        <div className="card value-card">
-                            <div className="card-block">
-                                <h4 className="card-title "> Number of Leaves </h4>
-                                <div className="row plot-row" style={{display: 'block'}}>
-                                    <strong className="no-cursor"> <Plot data={this.state.leaf_count_results_data}
-                                                                         layout={this.state.leaf_count_results_layout}
-                                                                         onInitialized={(figure) => this.setState(figure)}
-                                                                         onUpdate={(figure) => this.setState(figure)}/>
-                                    </strong>
+                        <div className="col-md-4">
+                            <div className="card value-card">
+                                <div className="card-block">
+                                    <h4 className="card-title "> Number of Leaves </h4>
+                                    <div className="row plot-row" style={{display: 'block'}}>
+                                        <strong className="no-cursor"> <Plot data={this.state.leaf_count_results_data}
+                                                                             layout={this.state.leaf_count_results_layout}
+                                                                             onInitialized={(figure) => this.setState(figure)}
+                                                                             onUpdate={(figure) => this.setState(figure)}/>
+                                        </strong>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
-                </div> 
                 }
 
                 {this.state.edit_mode ? <div className="edit-container">
