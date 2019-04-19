@@ -47,7 +47,6 @@ firebase.initializeApp({
 // our doc DB collection 
 var db = firebase.firestore();
 var keys_db_ref = db.collection('devicePublicKeys');
-var images_db_ref = db.collection('deviceUploadedImages');
 
 // our file storage for images
 var storage = firebase.storage();
@@ -58,7 +57,6 @@ var storage = firebase.storage();
 //
 const BUCKET_NAME = 'openag-public-image-uploads';
 const BUCKET = 'gs://' + BUCKET_NAME;
-const BUCKET_URL = 'https://storage.googleapis.com/' + BUCKET_NAME + '/';
 
 
 //-----------------------------------------------------------------------------
@@ -160,25 +158,6 @@ export const saveImage = functions.https.onRequest((request, response) => {
         }
     });
     //console.log("Saved image to gstorage:", file_name);
-
-    // get UTC timestamp
-    let TS = new Date().toISOString();
-
-    // also save the fact we wrote a file to storage, in the firebase doc DB
-    const doc = {
-        bucket: BUCKET_NAME,
-        file_name: file_name,
-        URL: BUCKET_URL + file_name,
-        device_id: did,
-        timestamp: TS
-    };
-    images_db_ref.add( doc ).then( newdoc => {
-        //console.log('Added image meta doc: ', doc);
-    })
-    .catch(err => {
-        console.log("Error saving metadata to doc db:", doc);
-        response.status(403).json({error: "nope"}); 
-    });
 
     // done OK if we get here
     response.json({ok: 'ok'});
