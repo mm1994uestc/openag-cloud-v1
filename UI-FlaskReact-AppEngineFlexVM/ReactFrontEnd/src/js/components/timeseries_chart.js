@@ -1,14 +1,18 @@
 import React from 'react';
 
 import {
+    AreaChart,
+    Brush,
     ChartContainer,
     ChartRow,
     Charts,
+    LabelAxis,
     LineChart,
     Resizable,
     ScatterChart,
     styler,
     YAxis,
+    ValueAxis,
     Legend
 } from "react-timeseries-charts";
 
@@ -38,14 +42,14 @@ export class TimeseriesChart extends React.PureComponent {
                 label: "Temperature",
                 format: ",.1f",
                 series: null,
-                show: true,
+                show: false,
                 type: "line"
             },
-            RHData: {units: "percent", label: "% RH", format: ",.1f", series: null, show: true, type: "line"},
-            co2Data: {units: "ppm", label: "CO2", format: "d", series: null, show: true, type: "line"},
-            topTempData: {units: "deg C", label: "Top Temp", format: "d", series: null, show: false, type: "line"},
-            middleTempData: {units: "deg C", label: "Mid Temp", format: "d", series: null, show: false, type: "line"},
-            bottomTempData: {units: "deg C", label: "Bottom Temp", format: "d", series: null, show: false, type: "line"},
+            RHData: {units: "percent", label: "% RH", format: ",.1f", series: null, show: false, type: "line"},
+            co2Data: {units: "ppm", label: "CO2", format: "d", series: null, show: false, type: "line"},
+            topTempData: {units: "deg C", label: "Top Temp", format: ",.1f", series: null, show: false, type: "line"},
+            middleTempData: {units: "deg C", label: "Mid Temp", format: ",.1f", series: null, show: false, type: "line"},
+            bottomTempData: {units: "deg C", label: "Bottom Temp", format: ",.1f", series: null, show: false, type: "line"},
             leafCount: {units: "", label:"Leaf Count", format:"d", series:null, show:false, type:"scatter"},
             plantHeight: {units: "cm", label:"Plant Height", format:",.2f", series:null, show:false, type:"scatter"}
         };
@@ -54,18 +58,19 @@ export class TimeseriesChart extends React.PureComponent {
         // Channel names list, in order we want them shown
         const channelNames = ["tempData", "RHData", "co2Data", "topTempData", "middleTempData", "bottomTempData", "leafCount", "plantHeight"];
 
-        // Default channels we'll actually display on our charts
-        const displayChannels = [ "tempData", "RHData", "co2Data"];
+        // Default channels we'll actually display on our charts -- We'll build this dynamically...
+        const displayChannels = [ ];
 
         this.state = {
             ready: false,
+            noData: false,
             mode: "channels",
             channels,
             channelNames,
             displayChannels,
             tracker: null,
             timerange: initialRange,
-//            brushrange: initialRange
+            brushrange: initialRange
         };
     }
 
@@ -98,8 +103,8 @@ export class TimeseriesChart extends React.PureComponent {
                 .then((response) => response.json())
                 .then((responseJson) => {
 
-                    console.log(responseJson)
-                    if (responseJson["response_code"] == 200) {
+                    //console.log(responseJson)
+                    if (responseJson["response_code"] === 200) {
 
                         let tempData = responseJson["results"]["temp"]
                         let RHData = responseJson["results"]["RH"]
@@ -131,9 +136,9 @@ export class TimeseriesChart extends React.PureComponent {
 
                         .then((response) => response.json())
                         .then((responseJson) => {
-                            console.log("CO2 data");
-                            console.log(responseJson)
-                            if (responseJson["response_code"] == 200) {
+                            //console.log("CO2 data");
+                            //console.log(responseJson)
+                            if (responseJson["response_code"] === 200) {
 
                                 let co2Data = responseJson["results"]
 
@@ -165,12 +170,17 @@ export class TimeseriesChart extends React.PureComponent {
                 //         });
                 // })
                 .then(() => {
-                    console.log("About to parse data");
+                    //console.log("About to parse data");
                     return this.parseData(this.state.displayChannels, this.state.channels, sensorData)
                 });
 
         }
     };
+    componentWillUpdate(nextProps, nextState, nextContext) {
+        if (nextProps.device_uuid !== this.props.device_uuid){
+            this.setState({ready: false});
+        }
+    }
 
     componentDidUpdate(prevProps, prevState, snapshot) {
         // if the device_uuid dropdown has changed, well want to pull new data.
@@ -185,13 +195,13 @@ export class TimeseriesChart extends React.PureComponent {
 
     handleActiveChange = channelName => {
         console.log("handling change for " + channelName);
-        const channels = this.state.channels;
-        channels[channelName].show = !channels[channelName].show;
-        this.setState({ channels });
+        const newChannels = this.state.channels;
+        newChannels[channelName].show = !newChannels[channelName].show;
+        this.setState({ channels: newChannels });
     };
 
     parseData = (displayChannels, channels, newData) => {
-        var ready = false;
+        var noData = true;
         var timeRange = null;
         var newDisplayChannels = this.state.displayChannels;
         this.state.channelNames.forEach(function (name) {
@@ -204,6 +214,7 @@ export class TimeseriesChart extends React.PureComponent {
                     dataEvents.push([eventDate, parseFloat(d.value)]);
                 });
                 if(dataEvents.length > 0) {
+                    noData = false;
                     // if this is the first time we're seeing data for a channel, show it
                     if (channels[name]["series"] === null) {
                         channels[name]["show"] = true;
@@ -231,20 +242,31 @@ export class TimeseriesChart extends React.PureComponent {
                     } else {
                         timeRange = timeRange.extents(channels[name]["series"].timerange())
                     }
-                    ready = true;
                 }
             }
         });
-        this.setState({ready: ready, channels: channels, timerange: timeRange, displayChannels: displayChannels});
+        //ready = true;  Using 'ready' to indicate that we attempted to load data.
+        this.setState({ready: true, noData: noData, channels: channels, timerange: timeRange, brushrange: timeRange, displayChannels: displayChannels});
     };
 
-    renderMultiAxisChart() {
+    handleTimeRangeChange = timerange => {
+        const { channels, displayChannels } = this.state;
+
+        if (timerange) {
+            this.setState({ timerange, brushrange: timerange });
+        } else {
+            this.setState({ timerange: channels[displayChannels[0]].series.range(), brushrange: null });
+        }
+    };
+
+    renderMultiAxisChart = () => {
 
         const {displayChannels, channels, timerange} = this.state;
 
         const charts = [];
         const axisList = [];
-        for (let channelName of displayChannels) {
+        //for (let channelName of displayChannels) {
+        displayChannels.forEach((channelName) => {
 
             let series = channels[channelName].series;
             const label = channels[channelName].label;
@@ -266,6 +288,7 @@ export class TimeseriesChart extends React.PureComponent {
                         width={70}
                         type="linear"
                         format={format}
+                        showGrid={true}
                     />
                 );
                 if(channels[channelName].type ==="line") {
@@ -277,6 +300,7 @@ export class TimeseriesChart extends React.PureComponent {
                             series={series}
                             columns={[channelName]}
                             style={style}
+                            interpolation={"curveStepAfter"}
                             breakLine
                         />
                     );
@@ -293,7 +317,8 @@ export class TimeseriesChart extends React.PureComponent {
                     );
                 }
             }
-        }
+        });
+
         const trackerInfoValues = displayChannels
             .filter(channelName => channels[channelName].show)
             .map(channelName => {
@@ -332,41 +357,206 @@ export class TimeseriesChart extends React.PureComponent {
                         </Charts>
                     </ChartRow>
                 </ChartContainer>
-            )
+            );
+    };
 
-    }
+    renderChannelsChart = () => {
+        const {displayChannels, channels, timerange} = this.state;
+
+        const rows = [];
+        displayChannels.forEach((channelName) => {
+
+            let series = channels[channelName].series;
+            //const label = channels[channelName].label;
+            //const max = channels[channelName].max;
+            //const min = channels[channelName].min;
+            //const format = channels[channelName].format;
+            //const id = `${channelName}_axis`;
+            //const visible = channels[channelName].show;
+            if (series !== null) {
+                const summary = [
+                    { label: "Current", value:channels[channelName].series.atLast().get(channelName) }
+                ];
+
+                let value = "--";
+                if (this.state.tracker) {
+                    const approx =
+                        (+this.state.tracker - +timerange.begin()) /
+                        (+timerange.end() - +timerange.begin());
+                    const ii = Math.floor(approx * series.size());
+                    const i = series.bisect(new Date(this.state.tracker), ii);
+                    const v = i < series.size() ? series.at(i).get(channelName) : null;
+                    if (v) {
+                        value = parseInt(v, 10);
+                    }
+                }
+                const mainChart = [];
+                if(channels[channelName].type ==="line") {
+                   mainChart.push( <LineChart
+                        key={`line-${channelName}`}
+                        axis={`${channelName}_axis`}
+                        series={series}
+                        columns={[channelName]}
+                        style={style}
+                        interpolation={"curveStepAfter"}
+                        breakLine
+                    /> );
+                } else if (channels[channelName].type === "scatter") {
+                    mainChart.push(<ScatterChart
+                        key={`scatter-${channelName}`}
+                        axis={`${channelName}_axis`}
+                        visible={channels[channelName].show}
+                        series={series}
+                        columns={[channelName]}
+                        style={style}
+                    />);
+                }
+
+                rows.push(
+                    <ChartRow
+                        height="100"
+                        visible={channels[channelName].show}
+                        key={`row-${channelName}`}
+                    >
+                        <LabelAxis
+                            id={`${channelName}_axis`}
+                            label={channels[channelName].label}
+                            values={summary}
+                            min={channels[channelName].min}
+                            max={channels[channelName].max}
+                            width={140}
+                            type="linear"
+                            format=",.1f"
+                        />
+                        <Charts>
+                            {mainChart}
+                        </Charts>
+                            <ValueAxis
+                                id={`${channelName}_valueaxis`}
+                                value={value}
+                                detail={channels[channelName].units}
+                                width={80}
+                                min={0}
+                                max={35}
+                            />
+                    </ChartRow>
+                );
+            }
+        });
+        return (
+            <ChartContainer
+                timeRange={this.state.timerange}
+                showGrid={false}
+                enablePanZoom
+                trackerPosition={this.state.tracker}
+                onTimeRangeChanged={this.handleTimeRangeChange}
+                onChartResize={width => this.handleChartResize(width)}
+                onTrackerChanged={this.handleTrackerChanged}
+            >
+                {rows}
+            </ChartContainer>
+        );
+    };
+
+    renderBrush = () => {
+        const { displayChannels, channels } = this.state;
+        return (
+            <ChartContainer
+                timeRange={channels[displayChannels[0]].series.range()}
+                trackerPosition={this.state.tracker}
+            >
+                <ChartRow height="100" debug={false}>
+                    <Brush
+                        timeRange={this.state.brushrange}
+                        allowSelectionClear
+                        onTimeRangeChanged={this.handleTimeRangeChange}
+                    />
+                    <YAxis
+                        id="axis1"
+                        label={[displayChannels[0]].label}
+                        min={0}
+                        max={channels[displayChannels[0]].max}
+                        width={70}
+                        type="linear"
+                        format="d"
+                    />
+                    <Charts>
+                        <AreaChart
+                            axis="axis1"
+                            style={style.areaChartStyle()}
+                            columns={{ up: [displayChannels[0]], down: [] }}
+                            series={channels[displayChannels[0]].series}
+                        />
+                    </Charts>
+                </ChartRow>
+            </ChartContainer>
+        );
+    };
 
     render() {
-        const {ready, displayChannels, channels} = this.state;
+        const {ready, noData, displayChannels, channels} = this.state;
 
         if (!ready) {
-            return <div><p>LOADING...</p></div>
+            return (
+                <div className={"row graphs-row mt-5 mb-5"}>
+                    <div className="col-md-2 offset-5 text-center">
+                        Loading Sensor Data...
+                    </div>
+                </div>
+            )
+        }
+
+        if (ready && noData) {
+            return (
+                <div className={"row graphs-row mt-5 mb-5"}>
+                    <div className="col-md-2 offset-5 text-center">
+                        No Data For Device
+                    </div>
+                </div>
+            )
         }
 
         const legend = displayChannels.map(channelName => ({
             key: channelName,
-            label: channels[channelName].label,
+            label: channels[channelName].label, // + " - " + channels[channelName].series.atLast().get(channelName),
             disabled: !channels[channelName].show
         }));
 
 
         return (
-
-            <div className="row graphs-row mt-5 mb-5">
-                <div className="col-md-10">
-                        <Resizable>
-                            {this.renderMultiAxisChart()}
-                        </Resizable>
+            <div>
+                <div className="row graphs-row mt-5 mb-5">
+                    <div className="col-md-10">
+                    <Resizable>
+                        {this.renderChannelsChart()}
+                    </Resizable>
+                    </div>
+                    <div className="col-md-2">
+                        <div className={"card"}>
+                            <div className={"card-body"}>
+                                <div className={"card-title"}>
+                                    <h6>Legend</h6>
+                                </div>
+                                <div className={"card-text"}>
+                                    <Legend
+                                        type="swatch"
+                                        align="left"
+                                        stack={true}
+                                        style={style}
+                                        categories={legend}
+                                        onSelectionChange={this.handleActiveChange}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div className="col-md-2">
-                    <Legend
-                        type="line"
-                        align="right"
-                        stack={true}
-                        style={style}
-                        categories={legend}
-                        onSelectionChange={this.handleActiveChange}
-                    />
+                <div className={"row graphs-row mt-5 mb-5"}>
+                    <div className={"col-md-10"}>
+                        <Resizable>
+                            {this.renderBrush()}
+                        </Resizable>
+                    </div>
                 </div>
             </div>
         )

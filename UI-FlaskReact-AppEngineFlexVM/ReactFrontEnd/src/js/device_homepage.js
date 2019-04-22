@@ -439,9 +439,9 @@ class DeviceHomepage extends Component {
                     this.setState({top_temp: responseJson["results"]["top_h2o_temp"]});
                     this.setState({middle_temp: responseJson["results"]["middle_h2o_temp"]});
                     this.setState({bottom_temp: responseJson["results"]["bottom_h2o_temp"]});
-                    this.setState({sensorValues: responseJson["results"]}); // Added by SRM
+                    //this.setState({sensorValues: responseJson["results"]}); // Added by SRM
 
-                    this.statecopy = this.state;
+                    //this.statecopy = this.state;
                 }
 
             })
@@ -854,152 +854,9 @@ class DeviceHomepage extends Component {
 
                     </div>
                 </div>
-                <div className="row graphs-row">
-                    {/*<Draggable cancel="strong">*/}
-                    <div className="col-md-4">
-                        <div className="card current-stats-card">
-                            <div className="card-block">
-                                <h4 className="card-title "> Air Temperature </h4>
-                                <div className="card-text">
-                                    <div className="graph">
-                                        <div className="knob_data">{this.state.current_temp}
-                                        </div>
-                                        <span className="txt_smaller"><sup>o</sup>C (Celsius) </span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    {/*</Draggable>*/}
-                    {/*<Draggable cancel="strong">*/}
-                    <div className="col-md-4">
-                        <div className="card current-stats-card">
-                            <div className="card-block">
-                                <h4 className="card-title "> Relative Humidity </h4>
-                                <div className="card-text">
-                                    <div className="graph">
-                                        <div className="knob_data">{this.state.current_rh}
-                                        </div>
-                                        <span className="txt_smaller"><sup>o</sup>% (Percent) </span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {this.state.BCC ? null :
-                        <div className="col-md-4">
-                            <div className="card current-stats-card">
-                                <div className="card-block">
-                                    <h4 className="card-title "> CO2 </h4>
-                                    <div className="card-text">
-                                        <div className="graph">
-                                            <div className="knob_data">{this.state.current_co2}
-                                            </div>
-                                            <span className="txt_smaller"><sup>o</sup>ppm (Parts per million) </span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    }
-                </div>
 
                 <TimeseriesChart device_uuid={this.state.selected_device_uuid} />
 
-                {this.state.BCC ? <div>
-                        <div className="row graphs-row">
-                            <div className="col-md-4">
-                                <div className="card current-stats-card">
-                                    <div className="card-block">
-                                        <h4 className="card-title "> Top H2O Temperature </h4>
-                                        <div className="card-text">
-                                            <div className="graph">
-                                                <div className="knob_data">{this.state.top_temp}
-                                                </div>
-                                                <span className="txt_smaller"><sup>o</sup>C (Celsius) </span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="col-md-4">
-                                <div className="card current-stats-card">
-                                    <div className="card-block">
-                                        <h4 className="card-title "> Middle H2O Temperature </h4>
-                                        <div className="card-text">
-                                            <div className="graph">
-                                                <div className="knob_data">{this.state.middle_temp}
-                                                </div>
-                                                <span className="txt_smaller"><sup>o</sup>C (Celsius) </span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="col-md-4">
-                                <div className="card current-stats-card">
-                                    <div className="card-block">
-                                        <h4 className="card-title "> Bottom H2O Temperature </h4>
-                                        <div className="card-text">
-                                            <div className="graph">
-                                                <div className="knob_data">{this.state.bottom_temp}
-                                                </div>
-                                                <span className="txt_smaller"><sup>o</sup>C (Celsius) </span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="row graphs-row">
-                            <div className="col-md-4">
-                                <div className="card value-card">
-                                    <div className="card-block">
-                                        <h4 className="card-title "> Top H2O Temperature </h4>
-                                        <div className="row plot-row" style={{display: 'block'}}>
-                                            <strong className="no-cursor"> <Plot data={this.state.top_temp_data}
-                                                                                 layout={this.state.temp_layout}
-                                                                                 onInitialized={(figure) => this.setState(figure)}
-                                                                                 onUpdate={(figure) => this.setState(figure)}/>
-                                            </strong>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="col-md-4">
-                                <div className="card value-card">
-                                    <div className="card-block">
-                                        <h4 className="card-title "> Middle H2O Temperature </h4>
-
-                                        <div className="row plot-row" style={{display: 'block'}}>
-                                            <strong className="no-cursor"> <Plot data={this.state.middle_temp_data}
-                                                                                 layout={this.state.temp_layout}
-                                                                                 onInitialized={(figure) => this.setState(figure)}
-                                                                                 onUpdate={(figure) => this.setState(figure)}/>
-                                            </strong>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="col-md-4">
-                                <div className="card value-card">
-                                    <div className="card-block">
-                                        <h4 className="card-title "> Bottom H2O Temperature </h4>
-
-                                        <div className="row plot-row" style={{display: 'block'}}>
-                                            <strong className="no-cursor"> <Plot data={this.state.bottom_temp_data}
-                                                                                 layout={this.state.temp_layout}
-                                                                                 onInitialized={(figure) => this.setState(figure)}
-                                                                                 onUpdate={(figure) => this.setState(figure)}/>
-                                            </strong>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    :
                     <div className="row graphs-row">
                         {/*<Draggable cancel="strong">*/}
                         <div className="col-md-4">
@@ -1031,7 +888,6 @@ class DeviceHomepage extends Component {
                             </div>
                         </div>
                     </div>
-                }
 
                 {this.state.edit_mode ? <div className="edit-container">
                     <div className="row graphs-row">
