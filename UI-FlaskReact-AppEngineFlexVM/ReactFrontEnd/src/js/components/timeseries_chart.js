@@ -106,11 +106,11 @@ export class TimeseriesChart extends React.PureComponent {
                     //console.log(responseJson)
                     if (responseJson["response_code"] === 200) {
 
-                        let tempData = responseJson["results"]["temp"]
-                        let RHData = responseJson["results"]["RH"]
-                        let topTempData = responseJson["results"]["top_h2o_temp"]
-                        let middleTempData = responseJson["results"]["middle_h2o_temp"]
-                        let bottomTempData = responseJson["results"]["bottom_h2o_temp"]
+                        let tempData = responseJson["results"]["temp"];
+                        let RHData = responseJson["results"]["RH"];
+                        let topTempData = responseJson["results"]["top_h2o_temp"];
+                        let middleTempData = responseJson["results"]["middle_h2o_temp"];
+                        let bottomTempData = responseJson["results"]["bottom_h2o_temp"];
 
                         sensorData["tempData"] = tempData;
                         sensorData["RHData"] = RHData;
