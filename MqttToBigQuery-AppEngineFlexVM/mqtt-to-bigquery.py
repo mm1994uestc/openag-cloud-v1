@@ -1,15 +1,24 @@
 #!/usr/bin/env python3
 
 """ This script reads data from the MQTT device events telemetry 
-    (actaully a PubSub) topic, 
-    and stores it in BiqQuery using the BigQuery batch API.
+    (actaully a PubSub) topic, and stores it in:
+    - BiqQuery using the BigQuery batch API.
+    - Datastore (realtime doc DB, used as cache of last 100 values).
+    - Storage (files, images, blobs).
+    - Firestore (doc DB, written by firebase cloud functions).
 """
 
 import os, sys, time, json, argparse, traceback, tempfile, logging, signal
+
 from google.cloud import pubsub
 from google.cloud import bigquery
 from google.cloud import datastore
 from google.cloud import storage
+
+import firebase_admin
+from firebase_admin import credentials
+from firebase_admin import firestore
+
 import utils # local module
 
 
@@ -18,6 +27,16 @@ NUM_RETRIES = 3
 BQ = None
 CS = None
 DS = None
+FB = None
+
+
+#------------------------------------------------------------------------------
+# Returns an Firebase firestore (doc db) client using the service account 
+# credentials JSON.
+def get_firestore_client(fb_service_account_json):
+    cred = credentials.Certificate(fb_service_account_json)
+    firebase_admin.initialize_app(cred)
+    return firestore.client()
 
 
 #------------------------------------------------------------------------------
@@ -49,10 +68,11 @@ def callback( msg ):
         global CS 
         global DS 
         global BQ 
+        global FB 
 
         # try to decode the byte data as a string / JSON
         pydict = json.loads( msg.data.decode('utf-8'))
-        utils.save_data( CS, DS, BQ, pydict, msg.attributes['deviceId'],
+        utils.save_data( CS, DS, BQ, FB, pydict, msg.attributes['deviceId'],
             os.getenv('GCLOUD_PROJECT'),
             os.getenv('BQ_DATASET'),
             os.getenv('BQ_TABLE'),
@@ -88,6 +108,7 @@ def main():
     # make sure our env. vars are set up
     if None == os.getenv('GCLOUD_PROJECT') or \
        None == os.getenv('GCLOUD_DEV_EVENTS') or \
+       None == os.getenv('FIREBASE_SERVICE_ACCOUNT') or \
        None == os.getenv('CS_BUCKET'):
         logging.critical('Missing required environment variables.')
         exit( 1 )
@@ -101,6 +122,9 @@ def main():
 
     global DS 
     DS = datastore.Client( os.getenv('GCLOUD_PROJECT'))
+
+    global FB 
+    FB = get_firestore_client( os.getenv('FIREBASE_SERVICE_ACCOUNT'))
 
     # the resource path for the topic 
     PS = pubsub.SubscriberClient()

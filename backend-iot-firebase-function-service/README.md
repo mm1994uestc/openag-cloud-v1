@@ -1,5 +1,8 @@
 ## Firebase cloud function 
 
+# Install firebase tools:
+npm i -g firebase-tools
+
 What this function does:
 - accepts a POSTed pubic RSA key (as JSON)
 - validates the JSON against the document DB schema

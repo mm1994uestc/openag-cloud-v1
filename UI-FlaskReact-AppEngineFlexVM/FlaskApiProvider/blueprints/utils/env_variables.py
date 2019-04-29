@@ -74,13 +74,12 @@ iot_client = get_IoT_client(path_to_google_service_account)
 
 
 # ------------------------------------------------------------------------------
-# Returns an authorized API client by discovering the IoT API
-# using the service account credentials JSON.
+# Returns an Firebase firestore (doc db) client using the service account 
+# credentials JSON.
 def get_firebase_client(fb_service_account_json):
     cred = credentials.Certificate(fb_service_account_json)
     firebase_admin.initialize_app(cred)
     return firestore.client()
-
 
 # Get a firebase client using the firebase auth
 fb_client = get_firebase_client(path_to_firebase_service_account)
