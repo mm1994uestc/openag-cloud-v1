@@ -1,5 +1,4 @@
 service: mqtt
-#runtime: custom
 runtime: python
 api_version: '1.0'
 env: flex
@@ -17,4 +16,3 @@ env_variables:
   BQ_DATASET: openag_public_user_data
   BQ_TABLE: vals
   CS_BUCKET: openag-v1-images
-  #FIREBASE_SERVICE_ACCOUNT: /app/fb-service-account.json

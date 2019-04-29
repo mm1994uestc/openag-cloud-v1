@@ -29,16 +29,10 @@ CS = None
 DS = None
 FB = None
 
-
 #------------------------------------------------------------------------------
 # Returns an Firebase firestore (doc db) client using the service account 
 # credentials JSON.
-#debugrob: 
-#def get_firestore_client(fb_service_account_json):
 def get_firestore_client():
-    #debugrob: 
-    #cred = credentials.Certificate(fb_service_account_json)
-    #firebase_admin.initialize_app(cred)
     firebase_admin.initialize_app()
     return firestore.client()
 
@@ -112,8 +106,6 @@ def main():
     # make sure our env. vars are set up
     if None == os.getenv('GCLOUD_PROJECT') or \
        None == os.getenv('GCLOUD_DEV_EVENTS') or \
-#debugrob: 
-#       None == os.getenv('FIREBASE_SERVICE_ACCOUNT') or \
        None == os.getenv('CS_BUCKET'):
         logging.critical('Missing required environment variables.')
         exit( 1 )
