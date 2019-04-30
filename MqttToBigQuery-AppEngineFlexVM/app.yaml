@@ -1,10 +1,12 @@
 service: mqtt
-runtime: custom
+runtime: python
 api_version: '1.0'
 env: flex
 runtime_config:
   # You can also specify 2 for Python 2.7
-  python_version: 3
+  python_version: 3.6
+
+entrypoint: python3.6 mqtt-to-bigquery.py 
 
 env_variables:
   GCLOUD_DEV_EVENTS: device-events
@@ -14,4 +16,3 @@ env_variables:
   BQ_DATASET: openag_public_user_data
   BQ_TABLE: vals
   CS_BUCKET: openag-v1-images
-  FIREBASE_SERVICE_ACCOUNT: /app/fb-service-account.json

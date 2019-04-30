@@ -19,7 +19,7 @@ import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import firestore
 
-import utils # local module
+import utils 
 
 
 # globals
@@ -29,13 +29,11 @@ CS = None
 DS = None
 FB = None
 
-
 #------------------------------------------------------------------------------
 # Returns an Firebase firestore (doc db) client using the service account 
 # credentials JSON.
-def get_firestore_client(fb_service_account_json):
-    cred = credentials.Certificate(fb_service_account_json)
-    firebase_admin.initialize_app(cred)
+def get_firestore_client():
+    firebase_admin.initialize_app()
     return firestore.client()
 
 
@@ -108,7 +106,6 @@ def main():
     # make sure our env. vars are set up
     if None == os.getenv('GCLOUD_PROJECT') or \
        None == os.getenv('GCLOUD_DEV_EVENTS') or \
-       None == os.getenv('FIREBASE_SERVICE_ACCOUNT') or \
        None == os.getenv('CS_BUCKET'):
         logging.critical('Missing required environment variables.')
         exit( 1 )
@@ -124,7 +121,7 @@ def main():
     DS = datastore.Client( os.getenv('GCLOUD_PROJECT'))
 
     global FB 
-    FB = get_firestore_client( os.getenv('FIREBASE_SERVICE_ACCOUNT'))
+    FB = get_firestore_client()
 
     # the resource path for the topic 
     PS = pubsub.SubscriberClient()
