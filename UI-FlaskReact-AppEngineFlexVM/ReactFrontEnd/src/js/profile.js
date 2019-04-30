@@ -158,7 +158,7 @@ class profile extends Component {
     }
 
     getUserDevices=()=> {
-        return fetch(process.env.REACT_APP_FLASK_URL + '/api/get_forum_key_by_uuid/', {
+        return fetch(process.env.REACT_APP_FLASK_URL + '/api/get_user_devices/', {
             method: 'POST',
             headers: {
                 'Accept': 'application/json',
@@ -173,6 +173,11 @@ class profile extends Component {
             .then((response) => response.json())
             .then((responseJson) => {
                 console.log(responseJson)
+                if (responseJson["response_code"] == 200) {
+                    console.log("Got device list 200 result")
+                    const devices = responseJson["results"]["devices"];
+                    this.setState({user_devices: devices})
+                }
             })
             .catch((error) => {
                 console.error(error);
@@ -225,7 +230,8 @@ class profile extends Component {
         let listDevices = <p>{this.state.get_devices_status}</p>
         if (this.state.user_devices.length > 0) {
             listDevices = this.state.user_devices.map((device) => {
-                return <div className="each-device-div" key={device.device_uuid}>
+                return (
+                    <div className="each-device-div" key={device.device_uuid}>
                     <div className="row device-row">
                         <div className="col-md-4">Device Name:</div>
                         <div className="col-md-4">{device.device_name}</div>
@@ -249,6 +255,7 @@ class profile extends Component {
                     </div>
 
                 </div>
+                )
             });
         }
 
