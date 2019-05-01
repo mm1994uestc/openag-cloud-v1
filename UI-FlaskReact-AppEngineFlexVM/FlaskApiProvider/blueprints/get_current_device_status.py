@@ -44,7 +44,7 @@ def get_current_device_status():
         "current_temp":"N/A for this device"
     }
     if device_data is not None:
-        timestamp = device_data.get("timestamp").decode()
+        timestamp = device_data.get("timestamp") # .decode()
         timenow = str(datetime.now())
         fmt1 = '%Y-%m-%d %H:%M:%S.%f'
         fmt2 = '%Y-%m-%dT%H:%M:%SZ'
