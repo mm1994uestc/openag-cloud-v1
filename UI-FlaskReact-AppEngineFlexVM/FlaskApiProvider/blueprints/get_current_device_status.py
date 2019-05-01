@@ -60,7 +60,7 @@ def get_current_device_status():
 
         if device_data.get("air_temp"):
             result_json["current_temp"] = \
-                "%s C" %((device_data["air_temp"]).decode())
+                "%s C" %((device_data["air_temp"])) # .decode())
 
         result_json["progress"] = int(round(float(device_data.get("percent_complete") if device_data.get("percent_complete") else "0.0"))*100.0)
 
