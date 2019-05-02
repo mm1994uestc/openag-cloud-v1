@@ -114,8 +114,11 @@ def get_device_data_from_DS(device_uuid):
     if device_data is None:
         return None
 
+    if DS_temp_KEY in device_data.keys():
+        air_temperature_celsius = device_data.get(DS_temp_KEY, [{}])[0].get("value", '')
+    else:
+        air_temperature_celsius = device_data.get(DS_temp_misspelled_KEY, [{}])[0].get("value", '')
 
-    air_temperature_celcius = device_data.get("air_temperature_celcius", [{}])[0].get("value", '')
     status = device_data.get("status", [None])[0]
 
     result_json = {
@@ -123,7 +126,7 @@ def get_device_data_from_DS(device_uuid):
         "percent_complete": status.get("recipe_percent_complete_string", ""),
         "time_elapsed": status.get("recipe_time_elapsed_string", ""),
         "device_status": status.get("status", ""),
-        "air_temp": air_temperature_celcius
+        "air_temp": air_temperature_celsius
     }
     return result_json
 

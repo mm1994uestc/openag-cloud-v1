@@ -44,7 +44,7 @@ def get_current_device_status():
         "current_temp":"N/A for this device"
     }
     if device_data is not None:
-        timestamp = device_data.get("timestamp").decode()
+        timestamp = device_data.get("timestamp") # .decode()
         timenow = str(datetime.now())
         fmt1 = '%Y-%m-%d %H:%M:%S.%f'
         fmt2 = '%Y-%m-%dT%H:%M:%SZ'
@@ -60,7 +60,7 @@ def get_current_device_status():
 
         if device_data.get("air_temp"):
             result_json["current_temp"] = \
-                "%s C" %((device_data["air_temp"]).decode())
+                "%s C" %((device_data["air_temp"])) # .decode())
 
         result_json["progress"] = int(round(float(device_data.get("percent_complete") if device_data.get("percent_complete") else "0.0"))*100.0)
 
